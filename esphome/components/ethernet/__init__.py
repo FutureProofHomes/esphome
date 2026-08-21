@@ -10,6 +10,7 @@ from esphome.components.network import (
     get_priority_interfaces_from_full_config,
     ip_address_literal,
 )
+from esphome.components.spi import CONF_INTERFACE_INDEX, get_spi_interface, SPIComponent
 from esphome.config_helpers import filter_source_files_from_platform
 import esphome.config_validation as cv
 from esphome.const import (
@@ -36,6 +37,7 @@ from esphome.const import (
     CONF_POLLING_INTERVAL,
     CONF_RESET_PIN,
     CONF_SPI,
+    CONF_SPI_ID,
     CONF_STATIC_IP,
     CONF_SUBNET,
     CONF_TYPE,
@@ -446,9 +448,13 @@ def _spi_schema(default_clock: str = "26.67MHz", max_clock: int = int(80e6)):
         BASE_SCHEMA.extend(
             cv.Schema(
                 {
-                    cv.Required(CONF_CLK_PIN): pins.internal_gpio_output_pin_number,
-                    cv.Required(CONF_MISO_PIN): pins.internal_gpio_input_pin_number,
-                    cv.Required(CONF_MOSI_PIN): pins.internal_gpio_output_pin_number,
+                    cv.Optional(CONF_SPI_ID): cv.All(
+                        cv.only_on_esp32,
+                        cv.use_id(SPIComponent),
+                    ),
+                    cv.Optional(CONF_CLK_PIN): pins.internal_gpio_output_pin_number,
+                    cv.Optional(CONF_MISO_PIN): pins.internal_gpio_input_pin_number,
+                    cv.Optional(CONF_MOSI_PIN): pins.internal_gpio_output_pin_number,
                     cv.Required(CONF_CS_PIN): pins.internal_gpio_output_pin_number,
                     cv.Optional(
                         CONF_INTERRUPT_PIN
@@ -516,13 +522,30 @@ CONFIG_SCHEMA = cv.All(
     _validate,
 )
 
+def _get_spi_config(spi_id):
+    for spi_conf in fv.full_config.get().get(CONF_SPI, []):
+        if spi_conf[CONF_ID] == spi_id:
+            return spi_conf
+    raise cv.Invalid(f"Unable to resolve SPI bus '{spi_id.id}' for ethernet")
 
 def _final_validate_spi(config):
     if not CORE.is_esp32:
         return  # SPI interface validation is ESP32-only
     if config[CONF_TYPE] not in SPI_ETHERNET_TYPES:
         return
-    from esphome.components.spi import CONF_INTERFACE_INDEX, get_spi_interface
+    if CONF_SPI_ID in config:
+        spi_conf = _get_spi_config(config[CONF_SPI_ID])
+        if (index := spi_conf.get(CONF_INTERFACE_INDEX)) is None:
+            raise cv.Invalid(
+                f"SPI bus '{config[CONF_SPI_ID].id}' must use a hardware interface to be shared with ethernet"
+            )
+        interface = get_spi_interface(index)
+        if interface not in ("SPI2_HOST", "SPI3_HOST"):
+            raise cv.Invalid(
+                f"SPI bus '{config[CONF_SPI_ID].id}' resolved to unsupported interface '{interface}' for ethernet"
+            )
+        config[CONF_INTERFACE] = interface.split("_")[0].lower()
+        return
 
     if spi_configs := fv.full_config.get().get(CONF_SPI):
         # get_spi_interface() returns strings like "SPI2_HOST"
@@ -620,9 +643,11 @@ async def _to_code_esp32(var: cg.Pvariable, config: ConfigType) -> None:
     )
 
     if config[CONF_TYPE] in SPI_ETHERNET_TYPES:
-        cg.add(var.set_clk_pin(config[CONF_CLK_PIN]))
-        cg.add(var.set_miso_pin(config[CONF_MISO_PIN]))
-        cg.add(var.set_mosi_pin(config[CONF_MOSI_PIN]))
+        if not CONF_SPI_ID in config:
+            cg.add_define("USE_ETHERNET_SPI_LEGACY")
+            cg.add(var.set_clk_pin(config[CONF_CLK_PIN]))
+            cg.add(var.set_miso_pin(config[CONF_MISO_PIN]))
+            cg.add(var.set_mosi_pin(config[CONF_MOSI_PIN]))
         cg.add(var.set_cs_pin(config[CONF_CS_PIN]))
         if CONF_INTERRUPT_PIN in config:
             cg.add(var.set_interrupt_pin(config[CONF_INTERRUPT_PIN]))

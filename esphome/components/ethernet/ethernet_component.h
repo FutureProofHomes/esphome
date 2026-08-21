@@ -171,9 +171,11 @@ class EthernetComponent final : public Component {
   esp_eth_handle_t get_eth_handle() const { return this->eth_handle_; }
 
 #ifdef USE_ETHERNET_SPI
+#ifdef USE_ETHERNET_SPI_LEGACY
   void set_clk_pin(uint8_t clk_pin);
   void set_miso_pin(uint8_t miso_pin);
   void set_mosi_pin(uint8_t mosi_pin);
+  #endif
   void set_cs_pin(uint8_t cs_pin);
   void set_interrupt_pin(uint8_t interrupt_pin);
   void set_reset_pin(uint8_t reset_pin);
@@ -252,9 +254,11 @@ class EthernetComponent final : public Component {
   void write_phy_register_(esp_eth_mac_t *mac, PHYRegister register_data);
 
 #ifdef USE_ETHERNET_SPI
+#ifdef USE_ETHERNET_SPI_LEGACY
   uint8_t clk_pin_;
   uint8_t miso_pin_;
   uint8_t mosi_pin_;
+#endif
   uint8_t cs_pin_;
   int interrupt_pin_{-1};
   int reset_pin_{-1};

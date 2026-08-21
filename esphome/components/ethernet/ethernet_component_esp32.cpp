@@ -167,7 +167,9 @@ void EthernetComponent::ethernet_lazy_init_() {
 #ifdef USE_ETHERNET_SPI
   // Install GPIO ISR handler to be able to service SPI Eth modules interrupts
   gpio_install_isr_service(0);
+  auto host = this->interface_;
 
+#ifdef USE_ETHERNET_SPI_LEGACY
   spi_bus_config_t buscfg = {
       .mosi_io_num = this->mosi_pin_,
       .miso_io_num = this->miso_pin_,
@@ -183,10 +185,9 @@ void EthernetComponent::ethernet_lazy_init_() {
       .intr_flags = 0,
   };
 
-  auto host = this->interface_;
-
   err = spi_bus_initialize(host, &buscfg, SPI_DMA_CH_AUTO);
   ESPHL_ERROR_CHECK(err, "SPI bus initialize error");
+#endif
 #endif
   // Network interface setup handled by network component
 
@@ -575,12 +576,14 @@ void EthernetComponent::dump_config() {
                 YESNO(this->is_connected()));
   this->dump_connect_params_();
 #ifdef USE_ETHERNET_SPI
+#ifdef USE_ETHERNET_SPI_LEGACY
   ESP_LOGCONFIG(TAG,
                 "  CLK Pin: %u\n"
                 "  MISO Pin: %u\n"
                 "  MOSI Pin: %u\n"
                 "  CS Pin: %u",
                 this->clk_pin_, this->miso_pin_, this->mosi_pin_, this->cs_pin_);
+#endif
   const char *spi_interface = "spi3";
   if (this->interface_ == SPI2_HOST) {
     spi_interface = "spi2";
@@ -909,9 +912,11 @@ void EthernetComponent::dump_connect_params_() {
 }
 
 #ifdef USE_ETHERNET_SPI
+#ifdef USE_ETHERNET_SPI_LEGACY
 void EthernetComponent::set_clk_pin(uint8_t clk_pin) { this->clk_pin_ = clk_pin; }
 void EthernetComponent::set_miso_pin(uint8_t miso_pin) { this->miso_pin_ = miso_pin; }
 void EthernetComponent::set_mosi_pin(uint8_t mosi_pin) { this->mosi_pin_ = mosi_pin; }
+#endif
 void EthernetComponent::set_cs_pin(uint8_t cs_pin) { this->cs_pin_ = cs_pin; }
 void EthernetComponent::set_interrupt_pin(uint8_t interrupt_pin) { this->interrupt_pin_ = interrupt_pin; }
 void EthernetComponent::set_reset_pin(uint8_t reset_pin) { this->reset_pin_ = reset_pin; }
